@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone OS Emulator</title>
+<style>
+  :root { --bg:#f2f2f5; --fg:#1c1c1e; --card:#fff; --accent:#3478f6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121214; --fg:#f2f2f5; --card:#1e1e22; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg);
+         display:flex; flex-wrap:wrap; gap:24px; justify-content:center; align-items:flex-start; padding:20px; }
+  .phone { width:340px; max-width:100%; background:#000; border-radius:44px; padding:14px;
+           box-shadow:0 20px 50px rgba(0,0,0,.35); border:3px solid #333; }
+  .notch { width:90px; height:18px; background:#000; border-radius:0 0 12px 12px; margin:-14px auto 8px; }
+  #screen_container { background:#000; border-radius:28px; overflow:hidden; width:100%;
+                      aspect-ratio:9/16; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  #screen_container canvas { max-width:100%; max-height:100%; width:100%; height:auto; }
+  #screen_container > div { display:none; }
+  .home { width:110px; height:5px; background:#555; border-radius:3px; margin:10px auto 0; }
+  .panel { background:var(--card); border-radius:16px; padding:18px; width:340px; max-width:100%; }
+  h1 { font-size:18px; margin:0 0 12px; }
+  label { display:block; font-size:13px; margin:12px 0 4px; opacity:.8; }
+  input, select, button { width:100%; padding:10px; border-radius:10px; border:1px solid #8884;
+                          background:transparent; color:inherit; font-size:14px; }
+  button { background:var(--accent); color:#fff; border:0; margin-top:14px; cursor:pointer; }
+  button.alt { background:#8883; color:inherit; margin-top:8px; }
+  #status { font-size:12px; margin-top:12px; opacity:.75; min-height:16px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div id="screen_container">
+    <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
+    <canvas></canvas>
+  </div>
+  <div class="home"></div>
+</div>
+
+<div class="panel">
+  <h1>Phone OS Emulator</h1>
+
+  <label>Preset</label>
+  <select id="preset">
+    <option value="kolibri">KolibriOS (floppy, light demo)</option>
+    <option value="file">My own image (upload)</option>
+    <option value="url">My own image (URL)</option>
+  </select>
+
+  <label>Image type</label>
+  <select id="type">
+    <option value="cdrom">CD / ISO (.iso)</option>
+    <option value="hda">Hard disk (.img)</option>
+    <option value="fda">Floppy (.img)</option>
+  </select>
+
+  <div id="fileRow" hidden><label>Image file</label><input type="file" id="file"></div>
+  <div id="urlRow" hidden><label>Image URL (CORS enabled, same site is best)</label>
+    <input type="text" id="url" placeholder="images/myos.iso"></div>
+
+  <label>RAM (MB)</label>
+  <select id="ram"><option>64</option><option selected>128</option><option>256</option><option>512</option></select>
+
+  <button id="start">Start</button>
+  <button class="alt" id="stop" disabled>Stop</button>
+  <button class="alt" id="full">Fullscreen</button>
+  <div id="status">Idle.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/v86@0.5.319/build/libv86.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const CDN = "https://cdn.jsdelivr.net/npm/v86@0.5.319/build/";
+const BIOS = "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/";
+const PRESETS = { kolibri: { type:"fda", url:"https://i.copy.sh/kolibri.img" } };
+let emu = null;
+
+const status = t => $("status").textContent = t;
+function syncUI() {
+  const p = $("preset").value;
+  $("fileRow").hidden = p !== "file";
+  $("urlRow").hidden = p !== "url";
+  $("type").disabled = p === "kolibri";
+}
+$("preset").onchange = syncUI; syncUI();
+
+async function start() {
+  if (typeof V86 === "undefined" && typeof V86Starter === "undefined") return status("v86 failed to load.");
+  stop();
+  const p = $("preset").value;
+  let type = $("type").value, src;
+  if (p === "kolibri") { type = PRESETS.kolibri.type; src = { url: PRESETS.kolibri.url }; }
+  else if (p === "file") {
+    const f = $("file").files[0]; if (!f) return status("Choose a file first.");
+    src = { buffer: await f.arrayBuffer() };
+  } else {
+    const u = $("url").value.trim(); if (!u) return status("Enter a URL.");
+    src = { url: u };
+  }
+  const cfg = {
+    wasm_path: CDN + "v86.wasm",
+    memory_size: $("ram").value * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    screen_container: $("screen_container"),
+    bios: { url: BIOS + "seabios.bin" },
+    vga_bios: { url: BIOS + "vgabios.bin" },
+    autostart: true,
+  };
+  cfg[type] = src;
+  if (type === "cdrom") cfg.boot_order = 0x123; // CD first
+  status("Booting...");
+  try {
+    const Ctor = typeof V86 !== "undefined" ? V86 : V86Starter;
+    emu = new Ctor(cfg);
+    emu.add_listener("emulator-ready", () => status("Running."));
+    attachTouch();
+    $("stop").disabled = false;
+  } catch (e) { status("Error: " + e.message); }
+}
+
+function stop() {
+  if (emu) { try { emu.destroy(); } catch (e) {} emu = null; }
+  $("stop").disabled = true; status("Stopped.");
+}
+
+// Touch as trackpad: drag moves cursor, tap clicks.
+function attachTouch() {
+  const el = $("screen_container");
+  let last = null, moved = false, t0 = 0;
+  el.ontouchstart = e => { const t = e.touches[0]; last = [t.clientX, t.clientY]; moved = false; t0 = Date.now(); };
+  el.ontouchmove = e => {
+    if (!emu || !last) return; e.preventDefault();
+    const t = e.touches[0];
+    const dx = t.clientX - last[0], dy = t.clientY - last[1];
+    if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+    last = [t.clientX, t.clientY];
+    emu.bus.send("mouse-delta", [dx * 1.5, -dy * 1.5]);
+  };
+  el.ontouchend = () => {
+    if (emu && !moved && Date.now() - t0 < 300) {
+      emu.bus.send("mouse-click", [true, false, false]);
+      setTimeout(() => emu && emu.bus.send("mouse-click", [false, false, false]), 60);
+    }
+    last = null;
+  };
+}
+
+$("start").onclick = start;
+$("stop").onclick = stop;
+$("full").onclick = () => $("screen_container").requestFullscreen?.();
+</script>
+</body>
+</html>
