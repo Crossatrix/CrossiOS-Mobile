@@ -3,153 +3,303 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Phone OS Emulator</title>
+<title>ISO Bench: boot .iso files in your browser</title>
 <style>
-  :root { --bg:#f2f2f5; --fg:#1c1c1e; --card:#fff; --accent:#3478f6; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#121214; --fg:#f2f2f5; --card:#1e1e22; } }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg);
-         display:flex; flex-wrap:wrap; gap:24px; justify-content:center; align-items:flex-start; padding:20px; }
-  .phone { width:340px; max-width:100%; background:#000; border-radius:44px; padding:14px;
-           box-shadow:0 20px 50px rgba(0,0,0,.35); border:3px solid #333; }
-  .notch { width:90px; height:18px; background:#000; border-radius:0 0 12px 12px; margin:-14px auto 8px; }
-  #screen_container { background:#000; border-radius:28px; overflow:hidden; width:100%;
-                      aspect-ratio:9/16; display:flex; align-items:center; justify-content:center; touch-action:none; }
-  #screen_container canvas { max-width:100%; max-height:100%; width:100%; height:auto; }
-  #screen_container > div { display:none; }
-  .home { width:110px; height:5px; background:#555; border-radius:3px; margin:10px auto 0; }
-  .panel { background:var(--card); border-radius:16px; padding:18px; width:340px; max-width:100%; }
-  h1 { font-size:18px; margin:0 0 12px; }
-  label { display:block; font-size:13px; margin:12px 0 4px; opacity:.8; }
-  input, select, button { width:100%; padding:10px; border-radius:10px; border:1px solid #8884;
-                          background:transparent; color:inherit; font-size:14px; }
-  button { background:var(--accent); color:#fff; border:0; margin-top:14px; cursor:pointer; }
-  button.alt { background:#8883; color:inherit; margin-top:8px; }
-  #status { font-size:12px; margin-top:12px; opacity:.75; min-height:16px; }
+:root{
+  --bg:#14171c; --panel:#1c2027; --line:#2c323c; --text:#e6e9ee; --dim:#8a93a2;
+  --accent:#4cc2ff; --ok:#6fd08c; --bad:#ff7b72;
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);min-height:100vh}
+header{padding:20px 24px 8px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-size:1.25rem;margin:0;font-weight:600;letter-spacing:.01em}
+header p{margin:0;color:var(--dim);font-size:.9rem}
+main{display:grid;grid-template-columns:320px 1fr;gap:20px;padding:16px 24px 32px;max-width:1400px;margin:auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+aside{display:flex;flex-direction:column;gap:14px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+.box h2{font-size:.95rem;margin:0 0 10px;font-weight:600}
+#drop{border:2px dashed var(--line);border-radius:6px;padding:22px 12px;text-align:center;cursor:pointer;color:var(--dim);transition:border-color .15s,color .15s}
+#drop.over,#drop:hover,#drop:focus-visible{border-color:var(--accent);color:var(--text);outline:none}
+#drop b{color:var(--text)}
+label{display:block;font-size:.82rem;color:var(--dim);margin:10px 0 4px}
+input[type=text],select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:8px;font:inherit;font-size:.9rem}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:8px 12px;font:inherit;font-size:.88rem;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--accent);color:#06222f;border-color:var(--accent);font-weight:600}
+#status{font-size:.85rem;color:var(--dim);min-height:1.3em}
+#status.ok{color:var(--ok)} #status.err{color:var(--bad)}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.82rem;color:var(--dim);font-variant-numeric:tabular-nums}
+.stats span:nth-child(even){color:var(--text);text-align:right}
+#stage{background:#000;border:1px solid var(--line);border-radius:6px;min-height:320px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+#screen{white-space:pre;font:14px monospace;line-height:14px}
+#screen canvas{display:block;max-width:100%;height:auto;margin:auto}
+#idle{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:24px;pointer-events:none}
+#kb{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#kb.off{opacity:.45;pointer-events:none}
+.kr{display:flex;gap:5px}
+.kk{flex:1 1 0;min-width:0;height:42px;padding:0;display:flex;align-items:center;justify-content:center;font-size:.88rem;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.kk.w15{flex-grow:1.5}.kk.w2{flex-grow:2}.kk.w3{flex-grow:3}.kk.w6{flex-grow:6}
+.kk.fn{height:32px;font-size:.75rem;color:var(--dim)}
+.kk.down{background:var(--accent);color:#06222f;border-color:var(--accent)}
+.kk.latched{border-color:var(--accent);color:var(--accent);background:#0f2c3b}
+@media(max-width:520px){.kk{height:38px;font-size:.8rem}.kr{gap:3px}#kb{padding:6px;gap:4px}}
+.hint{font-size:.78rem;color:var(--dim);margin:8px 2px 0}
 </style>
 </head>
 <body>
+<header>
+  <h1>ISO Bench</h1>
+  <p>Boot a .iso file in your browser with v86. Nothing is uploaded; the image stays on your machine.</p>
+</header>
 
-<div class="phone">
-  <div class="notch"></div>
-  <div id="screen_container">
-    <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
-    <canvas></canvas>
-  </div>
-  <div class="home"></div>
-</div>
+<main>
+  <aside>
+    <div class="box">
+      <h2>Disc image</h2>
+      <div id="drop" tabindex="0" role="button" aria-label="Choose an ISO file">
+        <b>Drop an .iso here</b><br>or click to browse
+        <input id="file" type="file" accept=".iso,.img" hidden>
+      </div>
+      <label for="url">Or load from a URL (the server must allow CORS)</label>
+      <input id="url" type="text" placeholder="https://example.com/disc.iso">
+      <div id="picked" class="hint">No image selected.</div>
+    </div>
 
-<div class="panel">
-  <h1>Phone OS Emulator</h1>
+    <div class="box">
+      <h2>Machine</h2>
+      <label for="mem">Memory</label>
+      <select id="mem">
+        <option value="64">64 MB</option>
+        <option value="128">128 MB</option>
+        <option value="256" selected>256 MB</option>
+        <option value="512">512 MB</option>
+        <option value="1024">1 GB</option>
+      </select>
+      <label for="vmem">Video memory</label>
+      <select id="vmem">
+        <option value="8">8 MB</option>
+        <option value="16" selected>16 MB</option>
+        <option value="32">32 MB</option>
+      </select>
+    </div>
 
-  <label>Preset</label>
-  <select id="preset">
-    <option value="kolibri">KolibriOS (floppy, light demo)</option>
-    <option value="file">My own image (upload)</option>
-    <option value="url">My own image (URL)</option>
-  </select>
+    <div class="box">
+      <h2>Controls</h2>
+      <div class="row">
+        <button id="start" class="primary" disabled>Boot</button>
+        <button id="pause" disabled>Pause</button>
+        <button id="reset" disabled>Restart</button>
+        <button id="stop" disabled>Power off</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="cad" disabled>Ctrl+Alt+Del</button>
+        <button id="full" disabled>Fullscreen</button>
+        <button id="shot" disabled>Screenshot</button>
+      </div>
+      <p id="status" style="margin:12px 0 0">Waiting for an image.</p>
+    </div>
 
-  <label>Image type</label>
-  <select id="type">
-    <option value="cdrom">CD / ISO (.iso)</option>
-    <option value="hda">Hard disk (.img)</option>
-    <option value="fda">Floppy (.img)</option>
-  </select>
+    <div class="box">
+      <h2>Status</h2>
+      <div class="stats">
+        <span>Image size</span><span id="s-size">-</span>
+        <span>Speed</span><span id="s-ips">-</span>
+        <span>Running</span><span id="s-run">no</span>
+      </div>
+    </div>
+  </aside>
 
-  <div id="fileRow" hidden><label>Image file</label><input type="file" id="file"></div>
-  <div id="urlRow" hidden><label>Image URL (CORS enabled, same site is best)</label>
-    <input type="text" id="url" placeholder="images/myos.iso"></div>
+  <section>
+    <div id="stage">
+      <div id="screen"><div></div><canvas></canvas></div>
+      <div id="idle">Pick an ISO and press Boot.<br>Small Linux live images (Tiny Core, Alpine, Damn Small Linux) and 32-bit OSes work best.</div>
+    </div>
+    <div id="kb" class="off" aria-label="On-screen keyboard"></div>
+    <p class="hint">Click the screen to capture the keyboard and mouse. Press Esc to release the mouse. v86 emulates a 32-bit x86 PC, so 64-bit-only ISOs will not boot.</p>
+  </section>
+</main>
 
-  <label>RAM (MB)</label>
-  <select id="ram"><option>64</option><option selected>128</option><option>256</option><option>512</option></select>
-
-  <button id="start">Start</button>
-  <button class="alt" id="stop" disabled>Stop</button>
-  <button class="alt" id="full">Fullscreen</button>
-  <div id="status">Idle.</div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/v86@0.5.319/build/libv86.js"></script>
+<!-- v86 runtime: change these paths if you self-host the files. -->
+<script src="https://cdn.jsdelivr.net/npm/v86@latest/build/libv86.js"></script>
 <script>
+const CONFIG = {
+  wasm: "https://cdn.jsdelivr.net/npm/v86@latest/build/v86.wasm",
+  bios: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/seabios.bin",
+  vgaBios: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/vgabios.bin"
+};
+
 const $ = id => document.getElementById(id);
-const CDN = "https://cdn.jsdelivr.net/npm/v86@0.5.319/build/";
-const BIOS = "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/";
-const PRESETS = { kolibri: { type:"fda", url:"https://i.copy.sh/kolibri.img" } };
-let emu = null;
+let emu = null, source = null, paused = false, statTimer = null;
 
-const status = t => $("status").textContent = t;
-function syncUI() {
-  const p = $("preset").value;
-  $("fileRow").hidden = p !== "file";
-  $("urlRow").hidden = p !== "url";
-  $("type").disabled = p === "kolibri";
+const fmt = n => n > 1e9 ? (n/1e9).toFixed(2)+" GB" : n > 1e6 ? (n/1e6).toFixed(1)+" MB" : (n/1e3).toFixed(0)+" KB";
+function status(msg, cls=""){ const s=$("status"); s.textContent=msg; s.className=cls; }
+
+function setPicked(src){
+  source = src;
+  $("picked").textContent = src.name + (src.file ? " (" + fmt(src.file.size) + ")" : "");
+  $("s-size").textContent = src.file ? fmt(src.file.size) : "remote";
+  $("start").disabled = false;
+  status("Ready to boot.");
 }
-$("preset").onchange = syncUI; syncUI();
 
-async function start() {
-  if (typeof V86 === "undefined" && typeof V86Starter === "undefined") return status("v86 failed to load.");
-  stop();
-  const p = $("preset").value;
-  let type = $("type").value, src;
-  if (p === "kolibri") { type = PRESETS.kolibri.type; src = { url: PRESETS.kolibri.url }; }
-  else if (p === "file") {
-    const f = $("file").files[0]; if (!f) return status("Choose a file first.");
-    src = { buffer: await f.arrayBuffer() };
-  } else {
-    const u = $("url").value.trim(); if (!u) return status("Enter a URL.");
-    src = { url: u };
-  }
-  const cfg = {
-    wasm_path: CDN + "v86.wasm",
-    memory_size: $("ram").value * 1024 * 1024,
-    vga_memory_size: 8 * 1024 * 1024,
-    screen_container: $("screen_container"),
-    bios: { url: BIOS + "seabios.bin" },
-    vga_bios: { url: BIOS + "vgabios.bin" },
-    autostart: true,
-  };
-  cfg[type] = src;
-  if (type === "cdrom") cfg.boot_order = 0x123; // CD first
-  status("Booting...");
+// File picking and drag-and-drop
+const drop = $("drop"), fileInput = $("file");
+drop.onclick = () => fileInput.click();
+drop.onkeydown = e => { if (e.key==="Enter"||e.key===" ") { e.preventDefault(); fileInput.click(); } };
+fileInput.onchange = () => { if (fileInput.files[0]) { $("url").value=""; setPicked({name:fileInput.files[0].name, file:fileInput.files[0]}); } };
+["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  if (f) { $("url").value=""; setPicked({name:f.name, file:f}); }
+});
+$("url").oninput = () => {
+  const u = $("url").value.trim();
+  if (/^https?:\/\//i.test(u)) setPicked({name:u.split("/").pop() || u, url:u});
+};
+
+function setRunning(on){
+  ["pause","reset","stop","cad","full","shot"].forEach(id => $(id).disabled = !on);
+  $("start").disabled = on || !source;
+  $("idle").style.display = on ? "none" : "flex";
+  $("s-run").textContent = on ? "yes" : "no";
+  $("kb").classList.toggle("off", !on);
+}
+
+async function boot(){
+  if (!window.V86 && !window.V86Starter) { status("Could not load the v86 library. Check your connection.", "err"); return; }
+  if (!source) return;
+  $("start").disabled = true;
+  status("Loading image...");
   try {
-    const Ctor = typeof V86 !== "undefined" ? V86 : V86Starter;
-    emu = new Ctor(cfg);
-    emu.add_listener("emulator-ready", () => status("Running."));
-    attachTouch();
-    $("stop").disabled = false;
-  } catch (e) { status("Error: " + e.message); }
+    const cdrom = source.file
+      ? { buffer: await source.file.arrayBuffer() }
+      : { url: source.url, async: true };
+    const V = window.V86 || window.V86Starter;
+    emu = new V({
+      wasm_path: CONFIG.wasm,
+      memory_size: +$("mem").value * 1024 * 1024,
+      vga_memory_size: +$("vmem").value * 1024 * 1024,
+      screen_container: $("screen"),
+      bios: { url: CONFIG.bios },
+      vga_bios: { url: CONFIG.vgaBios },
+      cdrom,
+      boot_order: 0x123,
+      autostart: true
+    });
+    emu.add_listener("emulator-ready", () => status("Booting from " + source.name + "...", "ok"));
+    emu.add_listener("download-error", e => status("Download failed: " + (e && e.file_name || "unknown file"), "err"));
+    setRunning(true);
+    paused = false; $("pause").textContent = "Pause";
+    let last = 0;
+    statTimer = setInterval(() => {
+      if (!emu) return;
+      const ips = emu.get_statistics ? emu.get_statistics().instructions_per_second : null;
+      $("s-ips").textContent = ips ? (ips/1e6).toFixed(0)+" MIPS" : "-";
+    }, 1000);
+  } catch (err) {
+    console.error(err);
+    status("Boot failed: " + err.message, "err");
+    $("start").disabled = false;
+  }
 }
 
-function stop() {
-  if (emu) { try { emu.destroy(); } catch (e) {} emu = null; }
-  $("stop").disabled = true; status("Stopped.");
+async function shutdown(){
+  clearInterval(statTimer);
+  clearLatched();
+  if (emu) { try { await emu.destroy(); } catch(e){} emu = null; }
+  const scr = $("screen");
+  scr.innerHTML = "<div></div><canvas></canvas>";
+  setRunning(false);
+  $("s-ips").textContent = "-";
+  status("Powered off.");
 }
 
-// Touch as trackpad: drag moves cursor, tap clicks.
-function attachTouch() {
-  const el = $("screen_container");
-  let last = null, moved = false, t0 = 0;
-  el.ontouchstart = e => { const t = e.touches[0]; last = [t.clientX, t.clientY]; moved = false; t0 = Date.now(); };
-  el.ontouchmove = e => {
-    if (!emu || !last) return; e.preventDefault();
-    const t = e.touches[0];
-    const dx = t.clientX - last[0], dy = t.clientY - last[1];
-    if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-    last = [t.clientX, t.clientY];
-    emu.bus.send("mouse-delta", [dx * 1.5, -dy * 1.5]);
-  };
-  el.ontouchend = () => {
-    if (emu && !moved && Date.now() - t0 < 300) {
-      emu.bus.send("mouse-click", [true, false, false]);
-      setTimeout(() => emu && emu.bus.send("mouse-click", [false, false, false]), 60);
-    }
-    last = null;
-  };
+// ---- On-screen keyboard (PC scancode set 1) ----
+// key: [label, shiftedLabel, scancode, extra class]; scancode > 0xFF means extended (E0 prefix)
+const E = 0xE000;
+const KB_ROWS = [
+  [["F1","","3B"],["F2","","3C"],["F3","","3D"],["F4","","3E"],["F5","","3F"],["F6","","40"],["F7","","41"],["F8","","42"],["F9","","43"],["F10","","44"],["F11","","57"],["F12","","58"]].map(k=>[k[0],"",parseInt(k[2],16),"fn"]),
+  [["Esc","",0x01],["1","!",0x02],["2","@",0x03],["3","#",0x04],["4","$",0x05],["5","%",0x06],["6","^",0x07],["7","&",0x08],["8","*",0x09],["9","(",0x0A],["0",")",0x0B],["-","_",0x0C],["=","+",0x0D],["⌫","",0x0E,"w15"]],
+  [["Tab","",0x0F,"w15"],["q","Q",0x10],["w","W",0x11],["e","E",0x12],["r","R",0x13],["t","T",0x14],["y","Y",0x15],["u","U",0x16],["i","I",0x17],["o","O",0x18],["p","P",0x19],["[","{",0x1A],["]","}",0x1B],["\\","|",0x2B]],
+  [["Caps","",0x3A,"w15"],["a","A",0x1E],["s","S",0x1F],["d","D",0x20],["f","F",0x21],["g","G",0x22],["h","H",0x23],["j","J",0x24],["k","K",0x25],["l","L",0x26],[";",":",0x27],["'",'"',0x28],["Enter","",0x1C,"w2"]],
+  [["Shift","",0x2A,"w2 mod"],["z","Z",0x2C],["x","X",0x2D],["c","C",0x2E],["v","V",0x2F],["b","B",0x30],["n","N",0x31],["m","M",0x32],[",","<",0x33],[".",">",0x34],["/","?",0x35],["↑","",E|0x48],["Del","",E|0x53]],
+  [["Ctrl","",0x1D,"w15 mod"],["Alt","",0x38,"w15 mod"],["`","~",0x29],["Space","",0x39,"w6"],["←","",E|0x4B],["↓","",E|0x50],["→","",E|0x4D]]
+];
+const kbEl = $("kb"), latched = new Set(), keyEls = {};
+const scan = (code, up) => {
+  const b = (code & 0xFF) | (up ? 0x80 : 0);
+  return code > 0xFF ? [0xE0, b] : [b];
+};
+const send = (code, up) => emu && emu.keyboard_send_scancodes(scan(code, up));
+const MODS = { Shift: 0x2A, Ctrl: 0x1D, Alt: 0x38 };
+
+function refreshShiftLabels(){
+  const sh = latched.has("Shift");
+  kbEl.querySelectorAll(".kk").forEach(el => { if (el.dataset.alt) el.textContent = sh ? el.dataset.alt : el.dataset.main; });
+}
+function clearLatched(){
+  latched.forEach(m => { send(MODS[m], true); keyEls[m].classList.remove("latched"); });
+  latched.clear(); refreshShiftLabels();
 }
 
-$("start").onclick = start;
-$("stop").onclick = stop;
-$("full").onclick = () => $("screen_container").requestFullscreen?.();
+KB_ROWS.forEach(row => {
+  const r = document.createElement("div"); r.className = "kr";
+  row.forEach(([main, alt, code, cls = ""]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "kk " + cls; b.textContent = main;
+    if (alt) { b.dataset.main = main; b.dataset.alt = alt; }
+    b.setAttribute("aria-label", main);
+    const isMod = cls.includes("mod");
+    if (isMod) keyEls[main] = b;
+    let held = false;
+    const down = e => {
+      e.preventDefault();
+      if (!emu || held) return;
+      if (isMod) {
+        // Tap to latch the modifier for the next key; tap again to release it.
+        if (latched.has(main)) { latched.delete(main); send(code, true); b.classList.remove("latched"); }
+        else { latched.add(main); send(code, false); b.classList.add("latched"); }
+        refreshShiftLabels();
+        return;
+      }
+      held = true; b.classList.add("down"); send(code, false);
+    };
+    const up = e => {
+      if (!held) return;
+      held = false; b.classList.remove("down"); send(code, true);
+      clearLatched();
+    };
+    b.addEventListener("pointerdown", down);
+    ["pointerup","pointercancel","pointerleave"].forEach(t => b.addEventListener(t, up));
+    b.addEventListener("contextmenu", e => e.preventDefault());
+    r.appendChild(b);
+  });
+  kbEl.appendChild(r);
+});
+
+$("start").onclick = boot;
+$("stop").onclick = shutdown;
+$("reset").onclick = () => { emu && emu.restart(); status("Restarted."); };
+$("pause").onclick = () => {
+  if (!emu) return;
+  if (paused) { emu.run(); $("pause").textContent = "Pause"; status("Running.", "ok"); }
+  else { emu.stop(); $("pause").textContent = "Resume"; status("Paused."); }
+  paused = !paused;
+};
+$("cad").onclick = () => emu && emu.keyboard_send_scancodes([0x1D,0x38,0x53,0xD3,0xB8,0x9D]);
+$("full").onclick = () => { const s=$("stage"); (s.requestFullscreen||s.webkitRequestFullscreen).call(s); };
+$("shot").onclick = () => {
+  const c = $("screen").querySelector("canvas");
+  if (!c || !c.width) { status("Nothing to capture yet. Use this in graphics mode.", "err"); return; }
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/png"); a.download = "screenshot.png"; a.click();
+};
 </script>
 </body>
 </html>
